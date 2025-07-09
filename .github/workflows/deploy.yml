@@ -1,0 +1,49 @@
+name: Build and Deploy Unity Catalog with SBT (No Publish Profile)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache SBT
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.ivy2/cache
+            ~/.sbt
+          key: ${{ runner.os }}-sbt
+
+      - name: Build with SBT
+        run: sbt clean package
+
+      - name: Find JAR
+        id: findjar
+        run: |
+          JAR=$(find . -name "unitycatalog-server*.jar" | head -n 1)
+          echo "Found: $JAR"
+          echo "jar_path=$JAR" >> $GITHUB_OUTPUT
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: unitycatalog-backend
+          package: ${{ steps.findjar.outputs.jar_path }}
